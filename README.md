@@ -38,11 +38,64 @@ The Gauss problem has a strict **outer loop dependency**: iteration `i` must fin
 | Version | `#pragma omp parallel` | `#pragma omp for` | Notes |
 |---------|------------------------|-------------------|-------|
 | **V1** | Inside `gaussian()` | Inside `gaussian()` | Self-contained parallel region per pivot step |
-| **V2** | Inside `main()` | Inside `gaussian()` | Threads created once in main, work distributed in gaussian |
-| **V3** | Inside `main()` | Inside `main()` | Both directives together in main, gaussian() is a pure computation function |
+| **V2** | Inside `main()` | Inside `main()` | Both directives together in main, gaussian() is a pure computation function |
  
-All three versions produce the same correct result. The differences are structural — they demonstrate how OpenMP's fork-join model can be applied at different levels of the call stack.
+All versions produce the same correct result. The differences are structural — they demonstrate how OpenMP's fork-join model can be applied at different levels of the call stack.
  
 ---
+## Key CUDA Patterns Used
+ 
+| File | CUDA technique |
+|------|----------------|
+| `reimann_cuda.c` | Grid-stride loop — one kernel covers 10⁹ iterations regardless of grid size |
+| `conv_cuda.c` | 2D thread grid — one thread per output pixel; kernel stored in `__constant__` memory |
+| `plus_proche_voisin_cuda.c` | Per-block reduction with `__shared__` memory — each block finds its local minimum, CPU reduces the block results |
+ 
+---
+## Compilation
+ 
+### Sequential
+ 
+```bash
+gcc -O2 -o reimann_sq       Pthreads/Riemann sum/reimann_sq.c               -lm
+gcc -O2 -o reimann_sq       Cuda/Riemann sum/reimann_sq.c               -lm
+gcc -O2 -o conv_sq           Pthreads/2D convolution/conv_sq.c
+gcc -O2 -o conv_sq           Cuda/2D convolution/conv_sq.c
+gcc -O2 -o ppv_sq            Pthreads/nearest neighbor/plus_proche_voisin_sq.c   -lm
+gcc -O2 -o ppv_sq            Cuda/nearest neighbor/plus_proche_voisin_sq.c   -lm
+gcc -O2 -o gauss_sq          OpenMP/gauss_sq.c                -lm
+```
+ 
+### Pthreads
+ 
+```bash
+gcc -O2 -o reimann_p         pthreads/Riemann sum/reimann_p.c                 -lpthread -lm
+gcc -O2 -o conv_p             pthreads/2D convolution/conv_p.c                   -lpthread
+gcc -O2 -o ppv_p              pthreads/nearest neighbor/plus_proche_voisin_p.c     -lpthread -lm
+```
+ 
+### OpenMP
+ 
+```bash
+gcc -O2 -fopenmp -o gauss_v1      OpenMP/gauss_openmp_v1.c           -lm
+gcc -O2 -fopenmp -o gauss_v2      OpenMP/gauss_openmp_v2.c           -lm
 
-
+```
+ 
+### CUDA (requires NVIDIA GPU + CUDA Toolkit ≥ 11)
+ 
+```bash
+nvcc -O2 -o reimann_cuda    Cuda/Riemann sum/reimann_cuda.c                   -lm
+nvcc -O2 -o conv_cuda        Cuda/2D convolution/conv_cuda.c
+nvcc -O2 -o ppv_cuda         Cuda/nearest neighbor/plus_proche_voisin_cuda.c       -lm
+```
+ 
+---
+ 
+## Requirements
+ 
+- **GCC ≥ 9** with OpenMP support (flag: `-fopenmp`)
+- **CUDA Toolkit ≥ 11** + compatible NVIDIA driver (for CUDA files)
+- `make` (optional, for build automation)
+ 
+---
