@@ -1,1 +1,48 @@
-# High-Performance-Computing-Labs
+# High-Performance-Computing-Labs - Parallel Programming Paradigms
+ 
+> A hands-on comparison of **sequential**, **Pthreads**, **OpenMP**, and **CUDA** implementations across four classic HPC problems, written in C.
+ 
+This repository was built as part of a High Performance Computing course (2024–2025). Four different problems are solved once as a sequential baseline and once per parallelism paradigm (Cuda, OpenMP, and/or Pthreads), so that execution times and speedups can be measured and compared directly.
+ 
+---
+## Problems
+ 
+### 1 — Riemann Sum
+Numerical integration of ∫₀¹ e^(−x²) dx using N = 10⁹ sub-intervals (left Riemann sum). Each sub-interval contributes `f(xᵢ) × Δx` to the total. The work is embarrassingly parallel — the interval is split evenly across threads/blocks with no dependencies between parts.
+ 
+### 2 — 2D Convolution
+Application of a 3×3 Gaussian blur kernel to a small RGB image (20×22 pixels). Each output pixel is computed independently as a weighted sum of its neighborhood, making this a natural fit for 2D thread grids in CUDA and loop parallelism in OpenMP/Pthreads. Border pixels use clamp (edge replication) padding.
+ 
+### 3 — Nearest Neighbor Search
+Finding the closest point to a fixed target `(500, 500)` among 10 million randomly generated 2D points. Each thread scans its own partition of the point array for a local minimum; the global minimum is found by reducing the per-thread results.
+ 
+### 4 — Gaussian Elimination (OpenMP only)
+Row-echelon reduction of a random N×N matrix using Gauss elimination without pivoting. This problem has loop-carried dependencies (outer loop `i` must complete before `i+1` starts), so only the inner loop over rows `j > i` can be parallelized. Three OpenMP strategies are explored to understand where and how to place `#pragma omp parallel` and `#pragma omp for`.
+ 
+---
+
+## Parallelism Concepts by Paradigm
+ 
+| Paradigm | Memory model | Unit of parallelism | Synchronization |
+|----------|-------------|---------------------|-----------------|
+| **Pthreads** | Shared (CPU) | POSIX thread | `pthread_join`, `pthread_mutex_t` |
+| **OpenMP** | Shared (CPU) | OpenMP thread | `#pragma omp parallel`, `#pragma omp for` |
+| **CUDA** | Separate (GPU ↔ CPU) | CUDA thread (warp → block → grid) | `cudaDeviceSynchronize`, `__syncthreads()` |
+ 
+---
+ 
+## OpenMP — Gaussian Elimination: 2 Versions Explained
+ 
+The Gauss problem has a strict **outer loop dependency**: iteration `i` must finish before `i+1` begins (each pivot row depends on the previous one). Only the **inner loop over rows `j`** can be safely parallelized.
+ 
+| Version | `#pragma omp parallel` | `#pragma omp for` | Notes |
+|---------|------------------------|-------------------|-------|
+| **V1** | Inside `gaussian()` | Inside `gaussian()` | Self-contained parallel region per pivot step |
+| **V2** | Inside `main()` | Inside `gaussian()` | Threads created once in main, work distributed in gaussian |
+| **V3** | Inside `main()` | Inside `main()` | Both directives together in main, gaussian() is a pure computation function |
+ 
+All three versions produce the same correct result. The differences are structural — they demonstrate how OpenMP's fork-join model can be applied at different levels of the call stack.
+ 
+---
+
+
