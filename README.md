@@ -1,8 +1,8 @@
 # High-Performance-Computing-Labs - Parallel Programming Paradigms
  
-> A hands-on comparison of **sequential**, **Pthreads**, **OpenMP**, and **CUDA** implementations across four classic HPC problems, written in C.
+> A hands-on comparison of **sequential**, **Pthreads**, **OpenMP**, **CUDA** and **MPI**  implementations across five classic HPC problems, written in C.
  
-This repository was built as part of a High Performance Computing course (2024–2025). Four different problems are solved once as a sequential baseline and once per parallelism paradigm (Cuda, OpenMP, and/or Pthreads), so that execution times and speedups can be measured and compared directly.
+This repository was built as part of a High Performance Computing course (2024–2025). Five different problems are solved once as a sequential baseline and once per parallelism paradigm (Cuda, OpenMP, and/or Pthreads), so that execution times and speedups can be measured and compared directly.
  
 ---
 ## Problems
@@ -19,6 +19,9 @@ Finding the closest point to a fixed target `(500, 500)` among 10 million random
 ### 4 — Gaussian Elimination (OpenMP only)
 Row-echelon reduction of a random N×N matrix using Gauss elimination without pivoting. This problem has loop-carried dependencies (outer loop `i` must complete before `i+1` starts), so only the inner loop over rows `j > i` can be parallelized. Three OpenMP strategies are explored to understand where and how to place `#pragma omp parallel` and `#pragma omp for`.
  
+### 5 — Array Squaring (MPI only)
+Distributed squaring of an integer array (N = 16 elements) using the **master-worker pattern** across multiple MPI processes. The master process splits the array into fixed-size chunks (size 4) and dispatches them dynamically to worker processes. Each worker squares the elements of its chunk and sends the result back. This problem demonstrates point-to-point communication, dynamic task scheduling, and process coordination in a distributed-memory model.
+ 
 ---
 
 ## Parallelism Concepts by Paradigm
@@ -28,6 +31,7 @@ Row-echelon reduction of a random N×N matrix using Gauss elimination without pi
 | **Pthreads** | Shared (CPU) | POSIX thread | `pthread_join`, `pthread_mutex_t` |
 | **OpenMP** | Shared (CPU) | OpenMP thread | `#pragma omp parallel`, `#pragma omp for` |
 | **CUDA** | Separate (GPU ↔ CPU) | CUDA thread (warp → block → grid) | `cudaDeviceSynchronize`, `__syncthreads()` |
+| **MPI** | Distributed (multi-process) | MPI process | `MPI_Send`, `MPI_Recv`, `MPI_Finalize` |
  
 ---
  
@@ -50,6 +54,24 @@ All versions produce the same correct result. The differences are structural —
 | `reimann_cuda.c` | Grid-stride loop — one kernel covers 10⁹ iterations regardless of grid size |
 | `conv_cuda.c` | 2D thread grid — one thread per output pixel; kernel stored in `__constant__` memory |
 | `plus_proche_voisin_cuda.c` | Per-block reduction with `__shared__` memory — each block finds its local minimum, CPU reduces the block results |
+ 
+---
+ 
+## MPI — Master-Worker Pattern Explained
+ 
+The MPI implementation follows the classic **master-worker** (or bag-of-tasks) model:
+ 
+- **Process 0 (master)**: holds the full array, splits it into chunks, and dispatches them one at a time to whichever worker asks. Once all chunks are sent, it sends a termination signal (tag = 1) to each idle worker, then collects all processed results.
+- **Processes 1…N-1 (workers)**: repeatedly request work from the master, process the received chunk (squaring each element), and send the result back until they receive the stop signal.
+ 
+This design naturally load-balances across any number of processes and requires at least 2 MPI processes to run.
+ 
+| Concept | How it's used |
+|---|---|
+| Point-to-point communication | `MPI_Send` / `MPI_Recv` for chunk dispatch and result collection |
+| Dynamic scheduling | Master assigns the next available chunk to whichever worker finishes first |
+| Tag-based signaling | Tag `0` = work available; Tag `1` = no more work (stop signal) |
+| `MPI_ANY_SOURCE` | Master accepts requests from any worker without a fixed order |
  
 ---
 ## Compilation
@@ -89,12 +111,25 @@ nvcc -O2 -o reimann_cuda    Cuda/Riemann sum/reimann_cuda.c                   -l
 nvcc -O2 -o conv_cuda        Cuda/2D convolution/conv_cuda.c
 nvcc -O2 -o ppv_cuda         Cuda/nearest neighbor/plus_proche_voisin_cuda.c       -lm
 ```
- 
+
+---
+
+
+### MPI (requires MPI implementation, e.g. OpenMPI or MPICH)
+```bash
+mpicc -O2 -o mpi_worker      MPI/array_sq_mpi.c                          -lm
+```
+To run with P processes:
+```bash
+mpirun -np <P> ./mpi_worker   # P must be >= 2
+```
+
 ---
  
 ## Requirements
  
 - **GCC ≥ 9** with OpenMP support (flag: `-fopenmp`)
+- **OpenMPI ≥ 4** or **MPICH ≥ 3** (for MPI files, compile with `mpicc`)
 - **CUDA Toolkit ≥ 11** + compatible NVIDIA driver (for CUDA files)
 - `make` (optional, for build automation)
  
