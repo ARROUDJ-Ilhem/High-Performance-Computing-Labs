@@ -112,8 +112,6 @@ nvcc -O2 -o conv_cuda        Cuda/2D convolution/conv_cuda.c
 nvcc -O2 -o ppv_cuda         Cuda/nearest neighbor/plus_proche_voisin_cuda.c       -lm
 ```
 
----
-
 
 ### MPI (requires MPI implementation, e.g. OpenMPI or MPICH)
 ```bash
